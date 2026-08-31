@@ -47,6 +47,11 @@
             backdrop-filter: blur(12px);
             border: 1px solid rgba(30, 45, 74, 0.6);
         }
+        /* Select: cores consistentes com o tema escuro (a lista nativa herda do OS) */
+        select#tipo_credito { color: #f1f5f9; }
+        select#tipo_credito.is-placeholder { color: #64748b; }
+        select#tipo_credito option { background-color: #131c2e; color: #f1f5f9; }
+        select#tipo_credito option[disabled] { color: #64748b; }
     </style>
 </head>
 <body class="text-slate-200 min-h-screen flex flex-col font-sans">
@@ -65,10 +70,9 @@
                     <p class="text-xs text-slate-400">Desafio Análise de Crédito</p>
                 </div>
             </div>
-            <div class="flex items-center gap-2">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    Ambiente de Testes
-                </span>
+            <div class="flex items-center gap-1 text-sm">
+                <a href="/" class="px-3 py-1.5 rounded-lg text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 font-medium">Análise</a>
+                <a href="/clientes" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-white/5 transition-all">Clientes</a>
             </div>
         </div>
     </header>
@@ -98,13 +102,15 @@
                     <div>
                         <label for="cpf" class="block text-sm font-medium text-slate-400 mb-2">CPF</label>
                         <input type="text" id="cpf" name="cpf" required placeholder="000.000.000-00"
+                            inputmode="numeric" autocomplete="off" maxlength="14"
                             class="w-full bg-slate-950/50 border border-panelBorder rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all">
                     </div>
 
                     <!-- Renda Mensal -->
                     <div>
                         <label for="renda_mensal" class="block text-sm font-medium text-slate-400 mb-2">Renda Mensal (R$)</label>
-                        <input type="number" step="0.01" id="renda_mensal" name="renda_mensal" required placeholder="Ex: 3500.00"
+                        <input type="text" id="renda_mensal" name="renda_mensal" required placeholder="R$ 0,00"
+                            inputmode="numeric" autocomplete="off"
                             class="w-full bg-slate-950/50 border border-panelBorder rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all">
                     </div>
                 </div>
@@ -114,7 +120,7 @@
                     <div>
                         <label for="tipo_credito" class="block text-sm font-medium text-slate-400 mb-2">Tipo de Crédito</label>
                         <select id="tipo_credito" name="tipo_credito" required
-                            class="w-full bg-slate-950/50 border border-panelBorder rounded-xl px-4 py-3 text-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all">
+                            class="is-placeholder w-full bg-slate-950/50 border border-panelBorder rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all">
                             <option value="" disabled selected>Selecione uma opção</option>
                             <option value="pessoal">Crédito Pessoal</option>
                             <option value="imobiliario">Crédito Imobiliário</option>
@@ -125,7 +131,8 @@
                     <!-- Valor Solicitado -->
                     <div>
                         <label for="valor_solicitado" class="block text-sm font-medium text-slate-400 mb-2">Valor Requerido (R$)</label>
-                        <input type="number" step="0.01" id="valor_solicitado" name="valor_solicitado" required placeholder="Ex: 15000.00"
+                        <input type="text" id="valor_solicitado" name="valor_solicitado" required placeholder="R$ 0,00"
+                            inputmode="numeric" autocomplete="off"
                             class="w-full bg-slate-950/50 border border-panelBorder rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all">
                     </div>
                 </div>
@@ -265,11 +272,162 @@
       -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // O candidato deve preencher a integração aqui.
-
             const form = document.getElementById('form-analise');
+            const btn = document.getElementById('btn-solicitar');
+            const btnTxt = document.getElementById('txt-solicitar');
+            const spinner = document.getElementById('loading-spinner');
 
-            // TODO: Adicionar Event Listeners e requisições para a API Laravel.
+            const $ = (id) => document.getElementById(id);
+
+            const brl = (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            const soDigitos = (v) => (v || '').replace(/\D/g, '');
+            const formataCpf = (v) => {
+                const d = soDigitos(v).padStart(11, '0');
+                return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9, 11)}`;
+            };
+
+
+            function mascaraCpf(valor) {
+                const d = soDigitos(valor).slice(0, 11);
+                let out = d.slice(0, 3);
+                if (d.length > 3) out += '.' + d.slice(3, 6);
+                if (d.length > 6) out += '.' + d.slice(6, 9);
+                if (d.length > 9) out += '-' + d.slice(9, 11);
+                return out;
+            }
+
+            // Dígitos são tratados como centavos: "350000" -> "R$ 3.500,00".
+            function mascaraMoeda(valor) {
+                const d = soDigitos(valor).slice(0, 15);
+                if (d === '') return '';
+                return (Number(d) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            }
+
+            function moedaParaNumero(valor) {
+                const d = soDigitos(valor);
+                return d === '' ? '' : Number(d) / 100;
+            }
+
+            function ligarMascara(el, fn) {
+                el.addEventListener('input', () => {
+                    const pos = el.value.length - el.selectionStart;
+                    el.value = fn(el.value);
+                    const novo = Math.max(0, el.value.length - pos);
+                    el.setSelectionRange(novo, novo);
+                });
+            }
+
+            ligarMascara($('cpf'), mascaraCpf);
+            ligarMascara($('renda_mensal'), mascaraMoeda);
+            ligarMascara($('valor_solicitado'), mascaraMoeda);
+
+            const selTipo = $('tipo_credito');
+            const ajustarCorSelect = () => selTipo.classList.toggle('is-placeholder', selTipo.value === '');
+            selTipo.addEventListener('change', ajustarCorSelect);
+            ajustarCorSelect();
+
+            function setLoading(on) {
+                btn.disabled = on;
+                btn.classList.toggle('opacity-60', on);
+                spinner.classList.toggle('hidden', !on);
+                btnTxt.textContent = on ? 'Analisando...' : 'Solicitar Análise de Crédito';
+            }
+
+            function limparErros() {
+                const box = $('form-erro');
+                if (box) box.remove();
+            }
+
+            function mostrarErro(mensagens) {
+                limparErros();
+                const box = document.createElement('div');
+                box.id = 'form-erro';
+                box.className = 'bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-sm text-red-300';
+                box.innerHTML = '<ul class="list-disc list-inside space-y-1">' +
+                    mensagens.map((m) => `<li>${m}</li>`).join('') + '</ul>';
+                form.prepend(box);
+            }
+
+            function badge(status) {
+                const aprovado = status === 'aprovado';
+                return `<span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${
+                    aprovado
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        : 'bg-red-500/10 text-red-400 border-red-500/20'
+                }">${aprovado ? 'Aprovado' : 'Reprovado'}</span>`;
+            }
+
+            function renderResultado(a) {
+                $('resultado-vazio').classList.add('hidden');
+                $('resultado-analise').classList.remove('hidden');
+                $('card-sucesso-contratacao').classList.add('hidden');
+
+                $('status-indicator-badge').innerHTML = badge(a.status);
+                $('res-nome').textContent = a.nome;
+                $('res-cpf').textContent = formataCpf(a.cpf);
+                $('res-score').textContent = a.score ?? '—';
+                $('res-status').textContent = a.status === 'aprovado' ? 'Aprovado' : 'Reprovado';
+                $('res-status').className = 'font-bold ' + (a.status === 'aprovado' ? 'text-emerald-400' : 'text-red-400');
+
+                const aprovado = a.status === 'aprovado';
+                $('dados-aprovado').classList.toggle('hidden', !aprovado);
+                $('dados-reprovado').classList.toggle('hidden', aprovado);
+                $('container-contratacao').classList.toggle('hidden', !aprovado);
+
+                if (aprovado) {
+                    $('res-taxa').textContent = `${Number(a.taxa_juros).toLocaleString('pt-BR', { minimumFractionDigits: 1 })}% a.m.`;
+                    $('res-parcela').textContent = brl(a.valor_parcela);
+                    $('res-comprometimento').textContent = `${a.comprometimento_renda_pct}%`;
+
+                    const irParaSimulacao = document.getElementById('btn-contratar');
+                    document.getElementById('txt-contratar').textContent = 'Ver Simulação e Contratar';
+                    irParaSimulacao.onclick = () => {
+                        window.location.href = a.simulacao_url || `/simulacao/${a.id}`;
+                    };
+                } else {
+                    $('res-motivo').textContent = a.motivo_rejeicao || 'Solicitação não elegível.';
+                }
+
+                $('resultado-analise').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                limparErros();
+                setLoading(true);
+
+                const payload = {
+                    nome: $('nome').value.trim(),
+                    cpf: soDigitos($('cpf').value),
+                    renda_mensal: moedaParaNumero($('renda_mensal').value),
+                    tipo_credito: $('tipo_credito').value,
+                    valor_solicitado: moedaParaNumero($('valor_solicitado').value),
+                };
+
+                try {
+                    const resp = await fetch('/api/analise-credito', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    const body = await resp.json().catch(() => ({}));
+
+                    if (resp.status === 422) {
+                        mostrarErro(Object.values(body.errors || { erro: [body.message || 'Dados inválidos.'] }).flat());
+                        return;
+                    }
+                    if (!resp.ok) {
+                        mostrarErro([body.message || 'Não foi possível concluir a análise. Tente novamente.']);
+                        return;
+                    }
+
+                    renderResultado(body.data);
+                } catch (err) {
+                    mostrarErro(['Falha de conexão com o servidor. Verifique sua rede e tente novamente.']);
+                } finally {
+                    setLoading(false);
+                }
+            });
         });
     </script>
 </body>

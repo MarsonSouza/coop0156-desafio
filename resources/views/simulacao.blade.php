@@ -231,9 +231,55 @@
       -->
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const btnConfirmar = document.getElementById('btn-confirmar');
+            const btn = document.getElementById('btn-confirmar');
+            const txt = document.getElementById('txt-confirmar');
+            const spinner = document.getElementById('spinner-confirmar');
+            const modal = document.getElementById('modal-sucesso');
+            const analiseId = @json($analise->id);
 
-            // TODO: Implementar o clique do botão de confirmação.
+            let enviando = false;
+
+            function feedbackErro(msg) {
+                let box = document.getElementById('erro-contratacao');
+                if (!box) {
+                    box = document.createElement('div');
+                    box.id = 'erro-contratacao';
+                    box.className = 'bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-6 text-red-400 text-sm';
+                    btn.closest('.glass-panel').prepend(box);
+                }
+                box.textContent = msg;
+            }
+
+            btn.addEventListener('click', async () => {
+                if (enviando) return;
+                enviando = true;
+                btn.disabled = true;
+                spinner.classList.remove('hidden');
+                txt.textContent = 'Processando...';
+
+                try {
+                    const resp = await fetch(`/api/analise-credito/${analiseId}/contratar`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    });
+                    const body = await resp.json().catch(() => ({}));
+
+                    if (!resp.ok) {
+                        feedbackErro(body.message || 'Não foi possível confirmar a contratação.');
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    modal.classList.remove('hidden');
+                } catch (err) {
+                    feedbackErro('Falha de conexão com o servidor. Tente novamente.');
+                    btn.disabled = false;
+                } finally {
+                    enviando = false;
+                    spinner.classList.add('hidden');
+                    txt.textContent = 'Confirmar Contratação';
+                }
+            });
         });
     </script>
 
