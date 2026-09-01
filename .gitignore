@@ -26,5 +26,6 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 
-
 /.config
+
+/.claude
